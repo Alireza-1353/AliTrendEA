@@ -226,6 +226,12 @@ int OnInit()
    UpdateLiveStats();
    UpdateTrendRow();
 
+   // v4.8: رفع باگ "پنل بعد از باز کردن مجدد ترمینال به‌صورت یک بلوک سیاه توپر دیده می‌شود تا کوچک/بزرگ شود".
+   // علت: وقتی ترمینال تازه باز می‌شود، چارت هنوز رندر اولیه خودش را کامل نکرده و ChartRedraw() که همین‌جا
+   // در OnInit (داخل CreatePanel) صدا زده می‌شود، توسط ترمینال نادیده گرفته می‌شود. یک تایمر یک‌باره کوتاه
+   // تنظیم می‌شود تا چند صدم ثانیه بعد، وقتی چارت کاملا آماده است، یک ChartRedraw() واقعی اجرا شود.
+   EventSetMillisecondTimer(300);
+
    // هج خودکار فقط روی حساب‌های Hedging واقعی معنا دارد؛ در حساب Netting پوزیشن مخالف باعث نتینگ می‌شود نه هج واقعی
    if(g_useHedge && (ENUM_ACCOUNT_MARGIN_MODE)AccountInfoInteger(ACCOUNT_MARGIN_MODE) != ACCOUNT_MARGIN_MODE_RETAIL_HEDGING)
       Print("WARNING: Auto-Hedge is enabled but this account is NOT a Hedging-type account. The feature will stay inactive until used on a Hedging account.");
@@ -234,10 +240,20 @@ int OnInit()
 }
 
 //+------------------------------------------------------------------+
+//| Timer function - فقط برای رفع باگ رندر اولیه پنل استفاده می‌شود   |
+//+------------------------------------------------------------------+
+void OnTimer()
+{
+   ChartRedraw();
+   EventKillTimer(); // یک‌باره کافی است؛ بعد از اولین رندر موفق، تایمر غیرفعال می‌شود
+}
+
+//+------------------------------------------------------------------+
 //| Expert deinitialization function                                 |
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+   EventKillTimer(); // اطمینان از خاموش شدن تایمر در صورتی که هنوز فعال بود (مثلا چارت خیلی سریع بسته شود)
    SaveVariables();
    ChartSetInteger(0, CHART_MOUSE_SCROLL, true);
    RemovePendingLineUI();
@@ -1861,8 +1877,9 @@ void CheckIfAllTrendlinesCleared()
 
 void CheckTrendlineTouch()
 {
-   if(GetTotalOpenPositionsCount() > 0) return;
-
+   // v4.8: محدودیت قبلی («اگر پوزیشن باز دارید، هیچ خط جدیدی معامله باز نکند») حذف شد.
+   // حالا که دکمه EA TREND LINES بعد از هر برخورد خودش خاموش می‌شود، کاربر با روشن‌کردن دستی
+   // دوباره آن، می‌تواند حتی با وجود پوزیشن(های) باز، از برخورد با همان خط یا هر خط دیگری معامله جدید بگیرد.
    datetime timeCurrent     = TimeCurrent();
    datetime currentBarTime  = (datetime)SeriesInfoInteger(_Symbol, _Period, SERIES_LASTBAR_DATE);
    double   bid             = SymbolInfoDouble(_Symbol, SYMBOL_BID);
